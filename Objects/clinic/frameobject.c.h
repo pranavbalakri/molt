@@ -240,6 +240,18 @@ frame_generator_get(PyObject *self, void *Py_UNUSED(context))
     return return_value;
 }
 
+PyDoc_STRVAR(frame_tail_calls__doc__,
+"Number of frames that tail calls replaced with this one.");
+
+static PyObject *
+frame_tail_calls_get_impl(PyFrameObject *self);
+
+static PyObject *
+frame_tail_calls_get(PyObject *self, void *Py_UNUSED(context))
+{
+    return frame_tail_calls_get_impl((PyFrameObject *)self);
+}
+
 PyDoc_STRVAR(frame_clear__doc__,
 "clear($self, /)\n"
 "--\n"
@@ -307,4 +319,6 @@ frame___sizeof__(PyObject *self, PyObject *Py_UNUSED(ignored))
 
 #define FRAME_F_GENERATOR_GETSETDEF {"f_generator", (getter)frame_generator_get, (setter)NULL, frame_generator__doc__},
 
-/*[clinic end generated code: output=dfa59114b6dbce08 input=a9049054013a1b77]*/
+#define FRAME_F_TAIL_CALLS_GETSETDEF {"f_tail_calls", (getter)frame_tail_calls_get, (setter)NULL, frame_tail_calls__doc__},
+
+/*[clinic end generated code: output=89bf437de7902aa3 input=a9049054013a1b77]*/

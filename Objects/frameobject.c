@@ -1983,6 +1983,20 @@ frame_generator_get_impl(PyFrameObject *self)
     Py_RETURN_NONE;
 }
 
+/*[clinic input]
+@getter
+frame.f_tail_calls as frame_tail_calls
+
+Number of frames that tail calls replaced with this one.
+[clinic start generated code]*/
+
+static PyObject *
+frame_tail_calls_get_impl(PyFrameObject *self)
+/*[clinic end generated code: output=65fc16127c5e5610 input=8cba316a077c6cf7]*/
+{
+    return PyLong_FromUnsignedLong(self->f_frame->tail_calls);
+}
+
 
 static PyGetSetDef frame_getsetlist[] = {
     FRAME_F_BACK_GETSETDEF
@@ -1995,6 +2009,7 @@ static PyGetSetDef frame_getsetlist[] = {
     FRAME_F_CODE_GETSETDEF
     FRAME_F_TRACE_OPCODES_GETSETDEF
     FRAME_F_GENERATOR_GETSETDEF
+    FRAME_F_TAIL_CALLS_GETSETDEF
     {0}
 };
 

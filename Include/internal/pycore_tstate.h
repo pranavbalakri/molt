@@ -61,6 +61,9 @@ typedef struct _PyThreadStateImpl {
         GENERATOR_YIELD = 1,
     } generator_return_kind;
 
+    // Number of frames that tail calls have replaced in this thread.
+    uint64_t tail_calls_eliminated;
+
     /* Head of circular linked-list of all tasks which are instances of `asyncio.Task`
        or subclasses of it used in `asyncio.all_tasks`.
     */

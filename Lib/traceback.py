@@ -337,7 +337,8 @@ class FrameSummary:
     """
 
     __slots__ = ('filename', 'lineno', 'end_lineno', 'colno', 'end_colno',
-                 'name', '_lines', '_lines_dedented', 'locals', '_code')
+                 'name', '_lines', '_lines_dedented', 'locals', '_code',
+                 '_tail_calls')
 
     def __init__(self, filename, lineno, name, *, lookup_line=True,
             locals=None, line=None,
@@ -358,6 +359,7 @@ class FrameSummary:
         self.end_colno = end_colno
         self.name = name
         self._code = kwargs.get("_code")
+        self._tail_calls = kwargs.get("_tail_calls", 0)
         self._lines = line
         self._lines_dedented = None
         if lookup_line:
@@ -542,6 +544,7 @@ class StackSummary(list):
                     lookup_line=False, locals=f_locals,
                     end_lineno=end_lineno, colno=colno, end_colno=end_colno,
                     _code=f.f_code,
+                    _tail_calls=getattr(f, "f_tail_calls", 0),
                 )
             )
         for filename in fnames:
@@ -827,6 +830,11 @@ class StackSummary(list):
             count += 1
             if count > _RECURSIVE_CUTOFF:
                 continue
+            if tail_calls := getattr(frame_summary, "_tail_calls", 0):
+                result.append(
+                    f'  [{tail_calls} tail call{"s" if tail_calls > 1 else ""} '
+                    f'eliminated]\n'
+                )
             result.append(formatted_frame)
 
         if count > _RECURSIVE_CUTOFF:

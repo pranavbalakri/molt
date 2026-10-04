@@ -1930,6 +1930,24 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(sys__tail_calls_eliminated__doc__,
+"_tail_calls_eliminated($module, /)\n"
+"--\n"
+"\n"
+"Return how many frames tail calls have replaced in the current thread.");
+
+#define SYS__TAIL_CALLS_ELIMINATED_METHODDEF    \
+    {"_tail_calls_eliminated", (PyCFunction)sys__tail_calls_eliminated, METH_NOARGS, sys__tail_calls_eliminated__doc__},
+
+static PyObject *
+sys__tail_calls_eliminated_impl(PyObject *module);
+
+static PyObject *
+sys__tail_calls_eliminated(PyObject *module, PyObject *Py_UNUSED(ignored))
+{
+    return sys__tail_calls_eliminated_impl(module);
+}
+
 PyDoc_STRVAR(sys_set_lazy_imports_filter__doc__,
 "set_lazy_imports_filter($module, /, filter)\n"
 "--\n"
@@ -2226,4 +2244,4 @@ exit:
 #ifndef SYS_GETANDROIDAPILEVEL_METHODDEF
     #define SYS_GETANDROIDAPILEVEL_METHODDEF
 #endif /* !defined(SYS_GETANDROIDAPILEVEL_METHODDEF) */
-/*[clinic end generated code: output=0de5ea347ec24d8a input=a9049054013a1b77]*/
+/*[clinic end generated code: output=079d2aa4e2edcab4 input=a9049054013a1b77]*/

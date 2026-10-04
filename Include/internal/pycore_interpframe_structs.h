@@ -49,6 +49,8 @@ struct _PyInterpreterFrame {
 #else
     uint8_t visited;
 #endif
+    /* Number of frames that tail calls replaced with this one */
+    uint32_t tail_calls;
     /* Locals and stack */
     _PyStackRef localsplus[1];
 };

@@ -682,6 +682,26 @@ tb_displayline(PyTracebackObject* tb, PyObject *f, PyObject *filename, int linen
     return err;
 }
 
+static int
+tb_print_tail_calls(PyObject *f, PyFrameObject *frame)
+{
+    unsigned long n = frame->f_frame->tail_calls;
+    if (n == 0) {
+        return 0;
+    }
+    PyObject *line = PyUnicode_FromFormat(
+        (n > 1)
+          ? "  [%lu tail calls eliminated]\n"
+          : "  [%lu tail call eliminated]\n",
+        n);
+    if (line == NULL) {
+        return -1;
+    }
+    int err = PyFile_WriteObject(line, f, Py_PRINT_RAW);
+    Py_DECREF(line);
+    return err;
+}
+
 static const int TB_RECURSIVE_CUTOFF = 3; // Also hardcoded in traceback.py.
 
 static int
@@ -741,6 +761,9 @@ tb_printinternal(PyTracebackObject *tb, PyObject *f, long limit)
         }
         cnt++;
         if (cnt <= TB_RECURSIVE_CUTOFF) {
+            if (tb_print_tail_calls(f, tb->tb_frame) < 0) {
+                goto error;
+            }
             if (tb_displayline(tb, f, code->co_filename, tb_lineno,
                                tb->tb_frame, code->co_name) < 0) {
                 goto error;
@@ -1078,6 +1101,12 @@ dump_frame(int fd, _PyInterpreterFrame *frame)
         res = -1;
     }
     PUTS(fd, "\n");
+    if (frame->tail_calls > 0) {
+        PUTS(fd, "  [");
+        _Py_DumpDecimal(fd, (size_t)frame->tail_calls);
+        PUTS(fd, frame->tail_calls > 1 ? " tail calls eliminated]\n"
+                                       : " tail call eliminated]\n");
+    }
     return res;
 }
 

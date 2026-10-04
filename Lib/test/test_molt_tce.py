@@ -2,14 +2,17 @@
 
 import _thread
 import dis
+import faulthandler
+import io
 import os
 import sys
+import tempfile
 import threading
 import traceback
 import unittest
 import weakref
 from test import support
-from test.support import script_helper
+from test.support import import_helper, script_helper
 
 
 TCE_DISABLED = (
@@ -49,6 +52,18 @@ def count(n, acc=0):
     if n == 0:
         return acc
     return count(n - 1, acc + 1)
+
+
+def raise_after(n):
+    if n == 0:
+        raise ValueError("bottom")
+    return raise_after(n - 1)
+
+
+def tail_calls_at_bottom(n):
+    if n == 0:
+        return sys._getframe().f_tail_calls
+    return tail_calls_at_bottom(n - 1)
 
 
 def is_even(n):
@@ -319,6 +334,111 @@ class EliminationTests(unittest.TestCase):
                 forever()
         finally:
             timer.cancel()
+
+
+@requires_tce
+class CounterTests(unittest.TestCase):
+
+    def test_frame_counter(self):
+        self.assertEqual(sys._getframe().f_tail_calls, 0)
+        self.assertEqual(tail_calls_at_bottom(0), 0)
+        self.assertEqual(tail_calls_at_bottom(7), 7)
+
+    def test_counter_survives_frame_object_copy(self):
+        def bottom(n):
+            if n == 0:
+                return sys._getframe()
+            return bottom(n - 1)
+        # The frame object outlives its frame, so it gets a copy of it.
+        self.assertEqual(bottom(3).f_tail_calls, 3)
+
+    def test_thread_counter(self):
+        before = sys._tail_calls_eliminated()
+        tail_calls_at_bottom(100)
+        self.assertEqual(sys._tail_calls_eliminated() - before, 100)
+
+        def worker():
+            results.append(sys._tail_calls_eliminated())
+            tail_calls_at_bottom(10_000)
+            results.append(sys._tail_calls_eliminated())
+        results = []
+        before = sys._tail_calls_eliminated()
+        thread = threading.Thread(target=worker)
+        thread.start()
+        thread.join()
+        self.assertEqual(results[1] - results[0], 10_000)
+        # Starting and joining the thread may make a few tail calls here,
+        # but the worker's are counted only in the worker.
+        self.assertLess(sys._tail_calls_eliminated() - before, 10_000)
+
+
+@requires_tce
+class TracebackAnnotationTests(unittest.TestCase):
+
+    def get_exception(self, n):
+        try:
+            raise_after(n)
+        except ValueError as exc:
+            return exc
+
+    def test_traceback_module(self):
+        lines = traceback.format_exception(self.get_exception(5))
+        index = lines.index("  [5 tail calls eliminated]\n")
+        self.assertIn("in get_exception", lines[index - 1])
+        self.assertIn("in raise_after", lines[index + 1])
+
+    def test_singular(self):
+        lines = traceback.format_exception(self.get_exception(1))
+        self.assertIn("  [1 tail call eliminated]\n", lines)
+
+    def test_no_annotation_without_tail_calls(self):
+        lines = traceback.format_exception(self.get_exception(0))
+        self.assertFalse([line for line in lines if "eliminated" in line])
+
+    def test_c_traceback_printer(self):
+        _testcapi = import_helper.import_module("_testcapi")
+        output = io.StringIO()
+        _testcapi.traceback_print(self.get_exception(4).__traceback__, output)
+        lines = output.getvalue().splitlines()
+        index = lines.index("  [4 tail calls eliminated]")
+        self.assertIn("in raise_after", lines[index + 1])
+
+    def test_format_stack(self):
+        def bottom(n):
+            if n == 0:
+                stack = traceback.format_stack()
+                return stack
+            return bottom(n - 1)
+        stack = bottom(3)
+        self.assertEqual(stack[-2], "  [3 tail calls eliminated]\n")
+        self.assertIn("in bottom", stack[-1])
+
+    def test_faulthandler(self):
+        def bottom(n):
+            if n == 0:
+                with tempfile.TemporaryFile("w+") as fp:
+                    faulthandler.dump_traceback(fp, all_threads=False)
+                    fp.seek(0)
+                    lines = fp.read().splitlines()
+                return lines
+            return bottom(n - 1)
+        lines = bottom(2)
+        # Most recent call first: the annotation follows the frame.
+        index = lines.index("  [2 tail calls eliminated]")
+        self.assertIn("in bottom", lines[index - 1])
+
+    def test_uncaught_exception(self):
+        code = (
+            "def down(n):\n"
+            "    if n == 0:\n"
+            "        raise KeyError(n)\n"
+            "    return down(n - 1)\n"
+            "down(3)\n"
+        )
+        res = script_helper.assert_python_failure("-c", code)
+        self.assertIn(b"  [3 tail calls eliminated]\n", res.err)
+        res = script_helper.assert_python_failure("-X", "notce", "-c", code)
+        self.assertNotIn(b"eliminated", res.err)
 
 
 class NotEliminatedTests(unittest.TestCase):

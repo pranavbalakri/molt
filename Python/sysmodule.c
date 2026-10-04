@@ -2647,6 +2647,21 @@ sys__is_gil_enabled_impl(PyObject *module)
 }
 
 
+/*[clinic input]
+sys._tail_calls_eliminated
+
+Return how many frames tail calls have replaced in the current thread.
+[clinic start generated code]*/
+
+static PyObject *
+sys__tail_calls_eliminated_impl(PyObject *module)
+/*[clinic end generated code: output=2545d803e666d056 input=27dccd2a6c463918]*/
+{
+    _PyThreadStateImpl *tstate = (_PyThreadStateImpl *)_PyThreadState_GET();
+    return PyLong_FromUnsignedLongLong(tstate->tail_calls_eliminated);
+}
+
+
 #ifndef MS_WINDOWS
 static PerfMapState perf_map_state;
 #endif
@@ -2954,6 +2969,7 @@ static PyMethodDef sys_methods[] = {
 #endif
     SYS__GET_CPU_COUNT_CONFIG_METHODDEF
     SYS__IS_GIL_ENABLED_METHODDEF
+    SYS__TAIL_CALLS_ELIMINATED_METHODDEF
     SYS__DUMP_TRACELETS_METHODDEF
     {NULL, NULL}  // sentinel
 };

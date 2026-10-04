@@ -1280,6 +1280,7 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, _PyInterpreterFrame *frame, int 
     entry.frame.stackpointer = entry.stack;
     entry.frame.owner = FRAME_OWNED_BY_INTERPRETER;
     entry.frame.visited = 0;
+    entry.frame.tail_calls = 0;
     entry.frame.return_offset = 0;
 #ifdef Py_DEBUG
     entry.frame.lltrace = 0;
@@ -2075,6 +2076,11 @@ _PyEval_FrameClearAndReplace(PyThreadState *tstate, _PyInterpreterFrame *frame,
            (PyObject **)frame + _PyFrame_GetCode(frame)->co_framesize);
     int size = _PyFrame_GetCode(new_frame)->co_framesize;
     assert((PyObject **)new_frame + size == tstate->datastack_top);
+    uint32_t tail_calls = frame->tail_calls;
+    if (tail_calls < UINT32_MAX) {
+        tail_calls++;
+    }
+    ((_PyThreadStateImpl *)tstate)->tail_calls_eliminated++;
     // GH-99729: We need to unlink the frame *before* clearing it:
     tstate->current_frame = frame->previous;
     _PyThreadState_UpdateLastProfiledFrame(tstate, frame, tstate->current_frame);
@@ -2086,6 +2092,7 @@ _PyEval_FrameClearAndReplace(PyThreadState *tstate, _PyInterpreterFrame *frame,
     int stacktop = (int)(new_frame->stackpointer - new_frame->localsplus);
     memmove(frame, new_frame, size * sizeof(PyObject *));
     frame->stackpointer = frame->localsplus + stacktop;
+    frame->tail_calls = tail_calls;
     tstate->datastack_top = (PyObject **)frame + size;
     tstate->current_frame = frame;
     return frame;
