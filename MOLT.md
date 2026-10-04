@@ -28,6 +28,59 @@ Build exactly like CPython, for example `./configure --with-pydebug && make -j`
 - `./python -m dis script.py` shows which calls compile to tail calls.
 - After changing `Python/bytecodes.c`, run `make regen-all`.
 
+## Installing next to your normal Python
+
+Molt installs into its own prefix and is run as `molt`, so `python3` keeps
+running whatever Python you normally use. `make altinstall` only creates
+versioned names such as `python3.16`, never `python3` or `python`. An
+optimized build is much faster than the `--with-pydebug` development build.
+Build it from a clean checkout, because CPython can't build out of tree
+from a source directory that has been configured in place:
+
+```sh
+git worktree add --detach builddir/src molt
+mkdir -p builddir/release && cd builddir/release
+../src/configure --prefix="$HOME/.local/molt"
+make -j && make altinstall
+ln -s "$HOME/.local/molt/bin/python3.16" "$HOME/.local/bin/molt"
+```
+
+`~/.local/bin` must be on your `PATH`. After that:
+
+```sh
+molt script.py              # run a script with molt
+molt -m venv .venv          # a virtual environment that uses molt
+molt -m pip install pkg     # installs into ~/.local/molt only
+```
+
+To update after new commits, run
+`git -C builddir/src checkout --detach molt`, then repeat
+`make -j && make altinstall` in `builddir/release`. To uninstall, delete
+`~/.local/molt` and `~/.local/bin/molt`.
+
+## Seeing eliminated frames
+
+Every frame counts how many frames tail calls replaced in its place, and
+tracebacks show the count where frames are missing:
+
+```text
+Traceback (most recent call last):
+  File "demo.py", line 6, in <module>
+    count(5)
+    ~~~~~^^^
+  [5 tail calls eliminated]
+  File "demo.py", line 3, in count
+    raise ValueError("bottom")
+ValueError: bottom
+```
+
+The same line appears in `traceback.format_stack()` and other `traceback`
+module output, in the C traceback printer, and in faulthandler dumps. There
+it follows the frame, because faulthandler lists the most recent call first.
+`frame.f_tail_calls` gives the count for a frame, and
+`sys._tail_calls_eliminated()` returns how many frames tail calls have
+replaced in the current thread.
+
 ## Rules for tail position
 
 A call is compiled as a tail call when all of these hold:
@@ -92,6 +145,8 @@ the depth stays constant. The main pieces are:
 | `Python/ceval.c`, `Python/ceval_macros.h` | `_PyEval_CanEliminateTailCall()`, `_PyEval_FrameClearAndReplace()`, `DISPATCH_TAIL_CALL` |
 | `Python/instrumentation.c` | `sys.monitoring` tables for the new opcodes |
 | `Python/pylifecycle.c` | `-X notce` and `PYTHONNOTCE` |
+| `Include/internal/pycore_interpframe_structs.h`, `Objects/frameobject.c`, `Python/sysmodule.c` | The per-frame and per-thread counts, `frame.f_tail_calls`, `sys._tail_calls_eliminated()` |
+| `Lib/traceback.py`, `Python/traceback.c` | `[N tail calls eliminated]` in tracebacks and faulthandler dumps |
 | `Lib/test/test_molt_tce.py` | Tests |
 
 ## Turning it off
@@ -108,7 +163,8 @@ by tail call elimination.
 
 - **Eliminated frames are gone.** They don't appear in tracebacks,
   `sys._getframe()`, `frame.f_back`, `inspect.stack()`,
-  `traceback.extract_stack()` or faulthandler dumps.
+  `traceback.extract_stack()` or faulthandler dumps. Tracebacks and dumps
+  only show how many are missing.
 - **Infinite tail recursion never stops.** `def f(): return f()` loops forever
   instead of raising `RecursionError`, like `while True: pass`. Ctrl-C still
   interrupts it.
@@ -126,12 +182,21 @@ by tail call elimination.
   module's doctests, and `warnings` stack levels and logging's caller
   information can shift the same way. Assign the result to a variable before
   returning it to avoid this.
+- **The standard library is affected too.** Some stdlib code finds its caller
+  a fixed number of frames up while making tail calls along the way. A
+  module-level `Color = Enum("Color", "RED GREEN")` gets the wrong
+  `__module__` and can't be pickled, because `EnumType.__call__` ends in
+  `return cls._create_(...)`. Warnings from `re.compile()` point one frame
+  above the caller for the same reason.
 - **Debuggers can't recover frames.** Attaching a debugger mid-run (for
   example with `breakpoint()`) stops further elimination, but frames that
   were eliminated before it attached stay gone.
 - **`return f(...)` is not specialized.** The adaptive interpreter does not
   rewrite tail calls into fast paths such as `CALL_PY_EXACT_ARGS` or
-  `CALL_LEN`, so these calls are somewhat slower than in CPython.
+  `CALL_LEN`, so these calls are somewhat slower than in CPython. The
+  experimental JIT can't compile them either, so each tail call leaves
+  compiled code. On a debug JIT build, `count(10_000_000)` took 5.5 s with
+  the JIT on and 3.6 s with it off.
 - **Bytecode differs.** There are three new opcodes plus their instrumented
   variants, several existing opcodes are renumbered, and the magic number is
   3749. Molt and stock CPython 3.16 share the `cpython-316` cache tag, so
@@ -140,24 +205,35 @@ by tail call elimination.
   hold deferred references that the garbage collector can't see while the old
   frame is being cleared.
 
-So far molt has only been built and tested as a default (GIL) debug build on
-macOS. Free-threaded, experimental-JIT and `--with-tail-call-interp` builds
-have not been tried.
+Molt has been built and tested on macOS (arm64) in these configurations:
+
+| Build | Result |
+| --- | --- |
+| Default debug (`--with-pydebug`) | Full test suite; see [Test suite](#test-suite) |
+| Optimized (no `--with-pydebug`), installed as `molt` | `test_molt_tce` passes |
+| `--with-tail-call-interp` | `test_molt_tce` passes; same frame and traceback failures as the default build |
+| `--enable-experimental-jit` (LLVM 21) | `test_molt_tce` passes; same failures as the default build, plus two `test_capi.test_opt` tests because tail calls aren't specialized |
+| `--disable-gil` (free-threaded) | Elimination is off by design: the 27 tests that need it are skipped and the rest pass. The frame and traceback tests pass; `test_dis` fails as on the default build |
 
 ## Test suite
 
 An unmodified build of the same commit passes `make test` with no failures.
-Molt passes `test_molt_tce` and fails 12 other test files, all as direct
-consequences of the differences above. No existing tests were changed.
+Molt passes `test_molt_tce` and fails 15 other test files, all caused by the
+differences above. No existing tests were changed.
 
 Infinite tail recursion that the test expects to end in `RecursionError` runs
 until the test times out:
 
 - `test_exceptions`: `ExceptionTests.testInfiniteRecursion`
 - `test_opcache`: `TestCallCache.test_recursion_check_for_general_calls`
-- `test_threading`: `ThreadingExceptionTests.test_recursion_limit`. This one
-  runs in a child process, which keeps running after the test times out and
-  has to be killed by hand.
+- `test_threading`: `ThreadingExceptionTests.test_recursion_limit`
+
+These loops can outlive the test run: the `test_threading` child process,
+and sometimes the worker processes that re-run the timed-out tests, keep
+spinning. After a full run, check with `pgrep -fl python` and kill any
+leftovers. The traceback that faulthandler prints on a timeout may end in
+`line ???` and `<invalid frame>`, because it reads the looping thread's frames
+while they are being replaced.
 
 The test expects a frame that is now eliminated:
 
@@ -174,10 +250,15 @@ The test expects a frame that is now eliminated:
   `ZipSupportTests.test_doctest_issue4197`. Both use
   `def test_suite(): return doctest.DocTestSuite()`, which then finds the
   wrong "calling module".
+- `test_enum`: `TestSpecial.test_pickle_enum_function`, and `test_re`:
+  `ReTests.test_set_operations` (the `Enum` and `re.compile()` cases
+  described above).
 
 The test checks for `CALL` or for call specializations:
 
 - `test_compile`: `TestSpecifics.test_imported_load_method`
+- `test_dis` (2 tests): `test_disassemble_recursive` compares against a
+  disassembly that contains `CALL`.
 - `test_opcache` (5 tests): `test_call_c_function_extra_flags`,
   `test_assign_init_code`, `test_push_init_frame_fails`,
   `test_specialize_call_function_ex_py` and
@@ -192,5 +273,9 @@ To keep a full run short, use `make test TESTTIMEOUT=300`.
   `make regen-all` and rebuild.
 - Keep molt's magic number out of upstream's sequence by using the last number
   of the new version's range (3.16 uses 3700-3749).
+- Change the magic number whenever molt changes what the compiler emits.
+  Otherwise existing `.pyc` files stay valid and keep running the old
+  bytecode. Clearing `__pycache__` directories has the same effect in a
+  development tree.
 - When upstream changes call opcodes, also update the hand-written tables in
   `Python/instrumentation.c` and `_cache_format` in `Lib/opcode.py`.
