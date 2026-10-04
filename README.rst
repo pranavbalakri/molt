@@ -1,3 +1,29 @@
+Molt: CPython with tail call elimination
+========================================
+
+Molt is a fork of CPython's development branch (3.16) in which a function
+that ends in ``return f(...)`` hands its frame over to ``f`` instead of
+stacking a new frame on top of its own. Tail-recursive code runs in constant
+stack space and is not limited by the recursion limit::
+
+    def count(n, acc=0):
+        if n == 0:
+            return acc
+        return count(n - 1, acc + 1)
+
+    count(10_000_000)  # 10000000; stock CPython raises RecursionError
+
+Everything else behaves like CPython, except that eliminated frames no longer
+appear in tracebacks or stack inspection. Tracebacks show
+``[N tail calls eliminated]`` where frames are missing. Run with
+``-X notce`` or set ``PYTHONNOTCE=1`` to turn elimination off.
+
+See `MOLT.md <MOLT.md>`_ for the design, the exact rules for tail position,
+the known differences from CPython, and how to install molt as a ``molt``
+command next to your normal Python.
+
+The rest of this file is CPython's original README.
+
 This is Python version 3.16.0 alpha 0
 =====================================
 
