@@ -100,6 +100,17 @@ _cache_format = frozendict(
     CALL_FUNCTION_EX=frozendict(
         counter=1,
     ),
+    TAIL_CALL=frozendict(
+        counter=1,
+        func_version=2,
+    ),
+    TAIL_CALL_KW=frozendict(
+        counter=1,
+        func_version=2,
+    ),
+    TAIL_CALL_EX=frozendict(
+        counter=1,
+    ),
     STORE_SUBSCR=frozendict(
         counter=1,
     ),

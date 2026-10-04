@@ -274,6 +274,12 @@ int _PyOpcode_num_popped(int opcode, int oparg)  {
             return 0;
         case INSTRUMENTED_RETURN_VALUE:
             return 1;
+        case INSTRUMENTED_TAIL_CALL:
+            return 2 + oparg;
+        case INSTRUMENTED_TAIL_CALL_EX:
+            return 4;
+        case INSTRUMENTED_TAIL_CALL_KW:
+            return 3 + oparg;
         case INSTRUMENTED_YIELD_VALUE:
             return 1;
         case INTERPRETER_EXIT:
@@ -484,6 +490,12 @@ int _PyOpcode_num_popped(int opcode, int oparg)  {
             return 3;
         case SWAP:
             return 2 + (oparg-2);
+        case TAIL_CALL:
+            return 2 + oparg;
+        case TAIL_CALL_EX:
+            return 4;
+        case TAIL_CALL_KW:
+            return 3 + oparg;
         case TO_BOOL:
             return 1;
         case TO_BOOL_ALWAYS_TRUE:
@@ -769,6 +781,12 @@ int _PyOpcode_num_pushed(int opcode, int oparg)  {
             return 0;
         case INSTRUMENTED_RETURN_VALUE:
             return 1;
+        case INSTRUMENTED_TAIL_CALL:
+            return 1;
+        case INSTRUMENTED_TAIL_CALL_EX:
+            return 1;
+        case INSTRUMENTED_TAIL_CALL_KW:
+            return 1;
         case INSTRUMENTED_YIELD_VALUE:
             return 1;
         case INTERPRETER_EXIT:
@@ -979,6 +997,12 @@ int _PyOpcode_num_pushed(int opcode, int oparg)  {
             return 0;
         case SWAP:
             return 2 + (oparg-2);
+        case TAIL_CALL:
+            return 1;
+        case TAIL_CALL_EX:
+            return 1;
+        case TAIL_CALL_KW:
+            return 1;
         case TO_BOOL:
             return 1;
         case TO_BOOL_ALWAYS_TRUE:
@@ -1218,6 +1242,9 @@ const struct opcode_metadata _PyOpcode_opcode_metadata[267] = {
     [INSTRUMENTED_POP_JUMP_IF_TRUE] = { true, INSTR_FMT_IBC, HAS_ARG_FLAG },
     [INSTRUMENTED_RESUME] = { true, INSTR_FMT_IBC, HAS_ARG_FLAG | HAS_EVAL_BREAK_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG },
     [INSTRUMENTED_RETURN_VALUE] = { true, INSTR_FMT_IX, HAS_ERROR_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG | HAS_NEEDS_GUARD_IP_FLAG },
+    [INSTRUMENTED_TAIL_CALL] = { true, INSTR_FMT_IBC00, HAS_ARG_FLAG | HAS_EVAL_BREAK_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG | HAS_NEEDS_GUARD_IP_FLAG },
+    [INSTRUMENTED_TAIL_CALL_EX] = { true, INSTR_FMT_IXC, HAS_EVAL_BREAK_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG | HAS_NEEDS_GUARD_IP_FLAG },
+    [INSTRUMENTED_TAIL_CALL_KW] = { true, INSTR_FMT_IBC00, HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG | HAS_NEEDS_GUARD_IP_FLAG },
     [INSTRUMENTED_YIELD_VALUE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG | HAS_NEEDS_GUARD_IP_FLAG },
     [INTERPRETER_EXIT] = { true, INSTR_FMT_IX, HAS_ESCAPES_FLAG },
     [IS_OP] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_ESCAPES_FLAG },
@@ -1313,6 +1340,9 @@ const struct opcode_metadata _PyOpcode_opcode_metadata[267] = {
     [STORE_SUBSCR_DICT] = { true, INSTR_FMT_IXC, HAS_DEOPT_FLAG | HAS_ERROR_FLAG | HAS_ESCAPES_FLAG | HAS_RECORDS_VALUE_FLAG },
     [STORE_SUBSCR_LIST_INT] = { true, INSTR_FMT_IXC, HAS_DEOPT_FLAG | HAS_EXIT_FLAG | HAS_ESCAPES_FLAG },
     [SWAP] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_PURE_FLAG },
+    [TAIL_CALL] = { true, INSTR_FMT_IBC00, HAS_ARG_FLAG | HAS_EVAL_BREAK_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG | HAS_NEEDS_GUARD_IP_FLAG },
+    [TAIL_CALL_EX] = { true, INSTR_FMT_IXC, HAS_EVAL_BREAK_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG | HAS_NEEDS_GUARD_IP_FLAG },
+    [TAIL_CALL_KW] = { true, INSTR_FMT_IBC00, HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG | HAS_SYNC_SP_FLAG | HAS_NEEDS_GUARD_IP_FLAG },
     [TO_BOOL] = { true, INSTR_FMT_IXC00, HAS_ERROR_FLAG | HAS_ESCAPES_FLAG },
     [TO_BOOL_ALWAYS_TRUE] = { true, INSTR_FMT_IXC00, HAS_EXIT_FLAG | HAS_ESCAPES_FLAG | HAS_RECORDS_VALUE_FLAG },
     [TO_BOOL_BOOL] = { true, INSTR_FMT_IXC00, HAS_EXIT_FLAG },
@@ -1671,6 +1701,9 @@ const char *_PyOpcode_OpName[267] = {
     [INSTRUMENTED_POP_JUMP_IF_TRUE] = "INSTRUMENTED_POP_JUMP_IF_TRUE",
     [INSTRUMENTED_RESUME] = "INSTRUMENTED_RESUME",
     [INSTRUMENTED_RETURN_VALUE] = "INSTRUMENTED_RETURN_VALUE",
+    [INSTRUMENTED_TAIL_CALL] = "INSTRUMENTED_TAIL_CALL",
+    [INSTRUMENTED_TAIL_CALL_EX] = "INSTRUMENTED_TAIL_CALL_EX",
+    [INSTRUMENTED_TAIL_CALL_KW] = "INSTRUMENTED_TAIL_CALL_KW",
     [INSTRUMENTED_YIELD_VALUE] = "INSTRUMENTED_YIELD_VALUE",
     [INTERPRETER_EXIT] = "INTERPRETER_EXIT",
     [IS_OP] = "IS_OP",
@@ -1776,6 +1809,9 @@ const char *_PyOpcode_OpName[267] = {
     [STORE_SUBSCR_DICT] = "STORE_SUBSCR_DICT",
     [STORE_SUBSCR_LIST_INT] = "STORE_SUBSCR_LIST_INT",
     [SWAP] = "SWAP",
+    [TAIL_CALL] = "TAIL_CALL",
+    [TAIL_CALL_EX] = "TAIL_CALL_EX",
+    [TAIL_CALL_KW] = "TAIL_CALL_KW",
     [TO_BOOL] = "TO_BOOL",
     [TO_BOOL_ALWAYS_TRUE] = "TO_BOOL_ALWAYS_TRUE",
     [TO_BOOL_BOOL] = "TO_BOOL_BOOL",
@@ -1821,6 +1857,9 @@ const uint8_t _PyOpcode_Caches[256] = {
     [CALL] = 3,
     [CALL_KW] = 3,
     [CALL_FUNCTION_EX] = 1,
+    [TAIL_CALL] = 3,
+    [TAIL_CALL_KW] = 3,
+    [TAIL_CALL_EX] = 1,
     [BINARY_OP] = 5,
 };
 #endif
@@ -1828,9 +1867,6 @@ const uint8_t _PyOpcode_Caches[256] = {
 PyAPI_DATA(const uint8_t) _PyOpcode_Deopt[256];
 #ifdef NEED_OPCODE_METADATA
 const uint8_t _PyOpcode_Deopt[256] = {
-    [117] = 117,
-    [118] = 118,
-    [119] = 119,
     [120] = 120,
     [121] = 121,
     [122] = 122,
@@ -1850,9 +1886,6 @@ const uint8_t _PyOpcode_Deopt[256] = {
     [227] = 227,
     [228] = 228,
     [229] = 229,
-    [230] = 230,
-    [231] = 231,
-    [232] = 232,
     [BINARY_OP] = BINARY_OP,
     [BINARY_OP_ADD_FLOAT] = BINARY_OP,
     [BINARY_OP_ADD_INT] = BINARY_OP,
@@ -1971,6 +2004,9 @@ const uint8_t _PyOpcode_Deopt[256] = {
     [INSTRUMENTED_POP_JUMP_IF_TRUE] = INSTRUMENTED_POP_JUMP_IF_TRUE,
     [INSTRUMENTED_RESUME] = INSTRUMENTED_RESUME,
     [INSTRUMENTED_RETURN_VALUE] = INSTRUMENTED_RETURN_VALUE,
+    [INSTRUMENTED_TAIL_CALL] = INSTRUMENTED_TAIL_CALL,
+    [INSTRUMENTED_TAIL_CALL_EX] = INSTRUMENTED_TAIL_CALL_EX,
+    [INSTRUMENTED_TAIL_CALL_KW] = INSTRUMENTED_TAIL_CALL_KW,
     [INSTRUMENTED_YIELD_VALUE] = INSTRUMENTED_YIELD_VALUE,
     [INTERPRETER_EXIT] = INTERPRETER_EXIT,
     [IS_OP] = IS_OP,
@@ -2066,6 +2102,9 @@ const uint8_t _PyOpcode_Deopt[256] = {
     [STORE_SUBSCR_DICT] = STORE_SUBSCR,
     [STORE_SUBSCR_LIST_INT] = STORE_SUBSCR,
     [SWAP] = SWAP,
+    [TAIL_CALL] = TAIL_CALL,
+    [TAIL_CALL_EX] = TAIL_CALL_EX,
+    [TAIL_CALL_KW] = TAIL_CALL_KW,
     [TO_BOOL] = TO_BOOL,
     [TO_BOOL_ALWAYS_TRUE] = TO_BOOL,
     [TO_BOOL_BOOL] = TO_BOOL,
@@ -2089,9 +2128,6 @@ const uint8_t _PyOpcode_Deopt[256] = {
 #endif // NEED_OPCODE_METADATA
 
 #define EXTRA_CASES \
-    case 117: \
-    case 118: \
-    case 119: \
     case 120: \
     case 121: \
     case 122: \
@@ -2111,9 +2147,6 @@ const uint8_t _PyOpcode_Deopt[256] = {
     case 227: \
     case 228: \
     case 229: \
-    case 230: \
-    case 231: \
-    case 232: \
         ;
 struct pseudo_targets {
     uint8_t as_sequence;

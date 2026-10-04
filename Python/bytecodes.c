@@ -4380,7 +4380,7 @@ dummy_func(
                 arguments,
                 total_args,
                 PyStackRef_NULL,
-                opcode == INSTRUMENTED_CALL,
+                opcode == INSTRUMENTED_CALL || opcode == INSTRUMENTED_TAIL_CALL,
                 frame,
                 this_instr,
                 tstate);
@@ -5423,7 +5423,7 @@ dummy_func(
                 arguments,
                 total_args,
                 kwnames,
-                opcode == INSTRUMENTED_CALL_KW,
+                opcode == INSTRUMENTED_CALL_KW || opcode == INSTRUMENTED_TAIL_CALL_KW,
                 frame,
                 this_instr,
                 tstate);
@@ -5607,7 +5607,8 @@ dummy_func(
             EVAL_CALL_STAT_INC_IF_FUNCTION(EVAL_CALL_FUNCTION_EX, func);
             PyObject *result_o;
             assert(!_PyErr_Occurred(tstate));
-            if (opcode == INSTRUMENTED_CALL_FUNCTION_EX) {
+            if (opcode == INSTRUMENTED_CALL_FUNCTION_EX ||
+                opcode == INSTRUMENTED_TAIL_CALL_EX) {
                 PyObject *callargs = PyStackRef_AsPyObjectBorrow(callargs_st);
                 PyObject *kwargs = PyStackRef_AsPyObjectBorrow(kwargs_st);
                 assert(kwargs == NULL || PyDict_CheckExact(kwargs));
@@ -5763,6 +5764,44 @@ dummy_func(
             _CHECK_PERIODIC_AT_END;
 
         macro(INSTRUMENTED_CALL_FUNCTION_EX) =
+            unused/1 +
+            _MAKE_CALLARGS_A_TUPLE +
+            _DO_CALL_FUNCTION_EX +
+            _CHECK_PERIODIC_AT_END;
+
+        // Tail-position variants of CALL, CALL_KW and CALL_FUNCTION_EX.
+        // The compiler always follows them with RETURN_VALUE.
+        macro(TAIL_CALL) =
+            unused/3 +
+            _MAYBE_EXPAND_METHOD +
+            _DO_CALL +
+            _CHECK_PERIODIC_AT_END;
+
+        macro(INSTRUMENTED_TAIL_CALL) =
+            unused/3 +
+            _MAYBE_EXPAND_METHOD +
+            _MONITOR_CALL +
+            _DO_CALL +
+            _CHECK_PERIODIC_AT_END;
+
+        macro(TAIL_CALL_KW) =
+            unused/3 +
+            _MAYBE_EXPAND_METHOD_KW +
+            _DO_CALL_KW;
+
+        macro(INSTRUMENTED_TAIL_CALL_KW) =
+            unused/3 +
+            _MAYBE_EXPAND_METHOD_KW +
+            _MONITOR_CALL_KW +
+            _DO_CALL_KW;
+
+        macro(TAIL_CALL_EX) =
+            unused/1 +
+            _MAKE_CALLARGS_A_TUPLE +
+            _DO_CALL_FUNCTION_EX +
+            _CHECK_PERIODIC_AT_END;
+
+        macro(INSTRUMENTED_TAIL_CALL_EX) =
             unused/1 +
             _MAKE_CALLARGS_A_TUPLE +
             _DO_CALL_FUNCTION_EX +
