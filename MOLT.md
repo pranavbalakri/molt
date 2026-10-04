@@ -145,7 +145,7 @@ the depth stays constant. The main pieces are:
 | `Python/ceval.c`, `Python/ceval_macros.h` | `_PyEval_CanEliminateTailCall()`, `_PyEval_FrameClearAndReplace()`, `DISPATCH_TAIL_CALL` |
 | `Python/instrumentation.c` | `sys.monitoring` tables for the new opcodes |
 | `Python/pylifecycle.c` | `-X notce` and `PYTHONNOTCE` |
-| `Include/internal/pycore_interpframe_structs.h`, `Objects/frameobject.c`, `Python/sysmodule.c` | The per-frame and per-thread counts, `frame.f_tail_calls`, `sys._tail_calls_eliminated()` |
+| `Include/internal/pycore_interpframe_structs.h`, `Objects/frameobject.c`, `Python/sysmodule.c` | The per-frame and per-thread counts, `frame.f_tail_calls`, `sys._tail_calls_eliminated()`, and `sys._getframemodulename()` counting eliminated frames |
 | `Lib/traceback.py`, `Python/traceback.c` | `[N tail calls eliminated]` in tracebacks and faulthandler dumps |
 | `Lib/test/test_molt_tce.py` | Tests |
 
@@ -173,21 +173,29 @@ by tail call elimination.
   starts rather than after it returns. `__del__` methods, weakref callbacks and
   generator `finally` blocks for objects that only that frame referenced
   therefore run earlier.
-- **Callers of stack-inspecting code are skipped.** A function that looks at
-  its caller's frame sees its caller's caller when it is called in tail
-  position. For example, `return namedtuple("P", "x")` or
-  `return make_dataclass("D", ["x"])` in module `a`, called from module `b`,
-  creates a class whose `__module__` is `b`, which breaks pickling. The common
-  idiom `def test_suite(): return doctest.DocTestSuite()` collects the wrong
-  module's doctests, and `warnings` stack levels and logging's caller
-  information can shift the same way. Assign the result to a variable before
-  returning it to avoid this.
-- **The standard library is affected too.** Some stdlib code finds its caller
-  a fixed number of frames up while making tail calls along the way. A
-  module-level `Color = Enum("Color", "RED GREEN")` gets the wrong
-  `__module__` and can't be pickled, because `EnumType.__call__` ends in
-  `return cls._create_(...)`. Warnings from `re.compile()` point one frame
-  above the caller for the same reason.
+- **Code that inspects its caller can find a different frame.** If the
+  caller, or a frame in between, was eliminated, code that looks up the
+  stack finds the next surviving frame instead:
+  - `return namedtuple("P", "x")` or `return make_dataclass("D", ["x"])` in
+    module `a`, called from module `b`, creates a class whose `__module__`
+    is `b`, which breaks pickling. The idiom
+    `def test_suite(): return doctest.DocTestSuite()` collects the wrong
+    module's doctests. Assign the result to a variable before returning it
+    to avoid this.
+  - A warning with a fixed `stacklevel` that passes through a tail call
+    points one frame too high. For example, warnings from `re.compile()`
+    point at its caller's caller.
+  - `sys._getframe(n)`, `frame.f_back`, `inspect.stack()`, logging's caller
+    information and the `traceback` module only see frames that still
+    exist. Because they agree with each other, code that computes a
+    `stacklevel` by walking `f_back` keeps working.
+- **`sys._getframemodulename()` counts eliminated frames.** Code calls it
+  with a fixed depth to find the module that called it, so it treats each
+  eliminated frame as one level. That way `Enum("Color", "RED GREEN")` still
+  records the right module, and the enum can be pickled, even though
+  `EnumType.__call__` ends in a tail call. As a result,
+  `sys._getframemodulename(n)` can name a different module than
+  `sys._getframe(n)`.
 - **Debuggers can't recover frames.** Attaching a debugger mid-run (for
   example with `breakpoint()`) stops further elimination, but frames that
   were eliminated before it attached stay gone.
@@ -250,9 +258,11 @@ The test expects a frame that is now eliminated:
   `ZipSupportTests.test_doctest_issue4197`. Both use
   `def test_suite(): return doctest.DocTestSuite()`, which then finds the
   wrong "calling module".
-- `test_enum`: `TestSpecial.test_pickle_enum_function`, and `test_re`:
-  `ReTests.test_set_operations` (the `Enum` and `re.compile()` cases
-  described above).
+- `test_re`: `ReTests.test_set_operations` checks where a warning from
+  `re.compile()` points (see above).
+- `test_sys`: `SysModuleTest.test_getframemodulename` checks that
+  `sys._getframemodulename(n)` names the module of `sys._getframe(n)`,
+  which is no longer true when eliminated frames are in between.
 
 The test checks for `CALL` or for call specializations:
 
