@@ -317,6 +317,20 @@ _PyThreadState_GetFrame(PyThreadState *tstate)
     return _PyFrame_GetFirstComplete(tstate->current_frame);
 }
 
+/* Remove from 'depth' the frames that tail calls eliminated between 'frame'
+   and its caller, stopping at zero.  Lookups that walk a number of frames
+   up the stack use this so that they still reach the frame they would have
+   reached without tail call elimination. */
+static inline Py_ssize_t
+_PyFrame_SkipTailCalls(_PyInterpreterFrame *frame, Py_ssize_t depth)
+{
+    assert(depth >= 0);
+    if ((size_t)depth <= frame->tail_calls) {
+        return 0;
+    }
+    return depth - (Py_ssize_t)frame->tail_calls;
+}
+
 // Update last_profiled_frame for remote profiler frame caching.
 // Only update if we're removing the exact frame that was last profiled.
 // This avoids corrupting the cache when transient frames (called and returned

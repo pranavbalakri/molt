@@ -2081,6 +2081,7 @@ sys__getframe_impl(PyObject *module, int depth)
 
     if (frame != NULL) {
         while (depth > 0) {
+            depth = (int)_PyFrame_SkipTailCalls(frame, depth);
             frame = _PyFrame_GetFirstComplete(frame->previous);
             if (frame == NULL) {
                 break;
@@ -2585,6 +2586,9 @@ sys__getframemodulename_impl(PyObject *module, int depth)
     }
     _PyInterpreterFrame *f = _PyThreadState_GET()->current_frame;
     while (f && (_PyFrame_IsIncomplete(f) || depth-- > 0)) {
+        if (!_PyFrame_IsIncomplete(f)) {
+            depth = (int)_PyFrame_SkipTailCalls(f, depth);
+        }
         f = f->previous;
     }
     if (f == NULL || PyStackRef_IsNull(f->f_funcobj)) {

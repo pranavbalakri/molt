@@ -2,14 +2,17 @@
 
 import _thread
 import dis
+import enum
 import faulthandler
 import io
 import os
+import re
 import sys
 import tempfile
 import threading
 import traceback
 import unittest
+import warnings
 import weakref
 from test import support
 from test.support import import_helper, script_helper
@@ -370,6 +373,66 @@ class CounterTests(unittest.TestCase):
         # Starting and joining the thread may make a few tail calls here,
         # but the worker's are counted only in the worker.
         self.assertLess(sys._tail_calls_eliminated() - before, 10_000)
+
+
+@requires_tce
+class FrameDepthTests(unittest.TestCase):
+    """Lookups by depth count the frames that tail calls eliminated."""
+
+    def test_getframe(self):
+        def inner(depth):
+            frame = sys._getframe(depth)
+            return frame.f_code.co_name
+        def middle(depth):
+            return inner(depth)
+        def outer(depth):
+            name = middle(depth)
+            return name
+        self.assertEqual(outer(0), "inner")
+        # Level 1 is middle, which was eliminated; the frame above it is used.
+        self.assertEqual(outer(1), "outer")
+        self.assertEqual(outer(2), "outer")
+        self.assertEqual(outer(3), "test_getframe")
+
+    def test_getframemodulename(self):
+        # EnumType.__call__ tail-calls _create_, which looks two frames up.
+        Color = enum.Enum("Color", "RED GREEN")
+        self.assertEqual(Color.__module__, __name__)
+
+    def test_warning_stacklevel(self):
+        def inner():
+            warnings.warn("deep", UserWarning, stacklevel=3)
+        def middle():
+            return inner()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            middle(); lineno = sys._getframe().f_lineno
+        self.assertEqual(caught[0].filename, __file__)
+        self.assertEqual(caught[0].lineno, lineno)
+
+    def test_warning_stacklevel_pure_python(self):
+        code = "\n".join([
+            "import sys",
+            "sys.modules.pop('warnings', None)",
+            "sys.modules['_warnings'] = None",
+            "import warnings",
+            "def inner():",
+            "    warnings.warn('deep', UserWarning, stacklevel=3)",
+            "def middle():",
+            "    return inner()",
+            "with warnings.catch_warnings(record=True) as caught:",
+            "    warnings.simplefilter('always')",
+            "    middle()",
+            "print(warnings.warn.__module__, caught[0].lineno)",
+        ])
+        res = script_helper.assert_python_ok("-c", code)
+        self.assertEqual(res.out.decode().split(), ["_py_warnings", "11"])
+
+    def test_re_warning_location(self):
+        re.purge()
+        with self.assertWarns(FutureWarning) as cm:
+            re.compile(r"[[a-y]]")
+        self.assertEqual(cm.filename, __file__)
 
 
 @requires_tce
