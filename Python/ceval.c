@@ -2023,6 +2023,73 @@ _PyEval_FrameClearAndPop(PyThreadState *tstate, _PyInterpreterFrame * frame)
     }
 }
 
+/* Can a tail call to 'callable' replace 'frame' instead of pushing a new
+   frame on top of it? */
+int
+_PyEval_CanEliminateTailCall(PyThreadState *tstate, _PyInterpreterFrame *frame,
+                             PyObject *callable)
+{
+#ifdef Py_GIL_DISABLED
+    /* The GC can't see the callee's frame while 'frame' is being cleared,
+       so it would miss the deferred references held by that frame. */
+    return 0;
+#else
+    if (IS_PEP523_HOOKED(tstate) ||
+        frame->owner != FRAME_OWNED_BY_THREAD ||
+        Py_TYPE(callable) != &PyFunction_Type ||
+        ((PyFunctionObject *)callable)->vectorcall != _PyFunction_Vectorcall)
+    {
+        return 0;
+    }
+    PyCodeObject *code = (PyCodeObject *)PyFunction_GET_CODE(callable);
+    if (code->co_flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR)) {
+        return 0;
+    }
+    /* Tools using sys.monitoring, which includes sys.settrace() and
+       sys.setprofile(), must see every frame. */
+    _PyCoMonitoringData *monitoring = _PyFrame_GetCode(frame)->_co_monitoring;
+    if (monitoring != NULL) {
+        for (int i = 0; i < _PY_MONITORING_UNGROUPED_EVENTS; i++) {
+            if (monitoring->active_monitors.tools[i]) {
+                return 0;
+            }
+        }
+    }
+    /* The callee's frame is built directly on top of 'frame' before it is
+       moved into place, so it must fit in the current chunk. */
+    return _PyThreadState_HasStackSpace(tstate, code->co_framesize);
+#endif
+}
+
+/* Clear 'frame' as if it returned and move 'new_frame', which a tail call
+   pushed directly on top of it, into its place.  Returns the moved frame. */
+_PyInterpreterFrame *
+_PyEval_FrameClearAndReplace(PyThreadState *tstate, _PyInterpreterFrame *frame,
+                             _PyInterpreterFrame *new_frame)
+{
+    assert(frame->owner == FRAME_OWNED_BY_THREAD);
+    assert(new_frame->previous == frame->previous);
+    assert(new_frame->frame_obj == NULL);
+    assert((PyObject **)new_frame ==
+           (PyObject **)frame + _PyFrame_GetCode(frame)->co_framesize);
+    int size = _PyFrame_GetCode(new_frame)->co_framesize;
+    assert((PyObject **)new_frame + size == tstate->datastack_top);
+    // GH-99729: We need to unlink the frame *before* clearing it:
+    tstate->current_frame = frame->previous;
+    _PyThreadState_UpdateLastProfiledFrame(tstate, frame, tstate->current_frame);
+    _PyFrame_ClearExceptCode(frame);
+    PyStackRef_CLEAR(frame->f_executable);
+    // Finalizers run by the clear push their frames above new_frame and
+    // must have popped them all by now.
+    assert((PyObject **)new_frame + size == tstate->datastack_top);
+    int stacktop = (int)(new_frame->stackpointer - new_frame->localsplus);
+    memmove(frame, new_frame, size * sizeof(PyObject *));
+    frame->stackpointer = frame->localsplus + stacktop;
+    tstate->datastack_top = (PyObject **)frame + size;
+    tstate->current_frame = frame;
+    return frame;
+}
+
 /* Consumes references to func, locals and all the args */
 _PyInterpreterFrame *
 _PyEvalFramePushAndInit(PyThreadState *tstate, _PyStackRef func,

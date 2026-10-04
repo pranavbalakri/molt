@@ -4358,9 +4358,22 @@ dummy_func(
             {
                 int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                 PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                bool tail = false;
+                if (opcode == TAIL_CALL &&
+                    _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                {
+                    // The new frame replaces this one, so it can't borrow
+                    // references from this frame's locals.
+                    tail = true;
+                    callable = PyStackRef_MakeHeapSafe(callable);
+                    self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                    for (int i = 0; i < oparg; i++) {
+                        args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                    }
+                }
                 _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                     tstate, callable, locals,
-                    arguments, total_args, NULL, frame
+                    arguments, total_args, NULL, tail ? frame->previous : frame
                 );
                 DEAD(args);
                 DEAD(self_or_null);
@@ -4371,6 +4384,9 @@ dummy_func(
                 // so there is no need to clean them up.
                 if (new_frame == NULL) {
                     ERROR_NO_POP();
+                }
+                if (tail) {
+                    DISPATCH_TAIL_CALL(new_frame);
                 }
                 frame->return_offset = INSTRUCTION_SIZE;
                 DISPATCH_INLINED(new_frame);
@@ -5399,9 +5415,22 @@ dummy_func(
             {
                 int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                 PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                bool tail = false;
+                if (opcode == TAIL_CALL_KW &&
+                    _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                {
+                    // The new frame replaces this one, so it can't borrow
+                    // references from this frame's locals.
+                    tail = true;
+                    callable = PyStackRef_MakeHeapSafe(callable);
+                    self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                    for (int i = 0; i < oparg; i++) {
+                        args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                    }
+                }
                 _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                     tstate, callable, locals,
-                    arguments, positional_args, kwnames_o, frame
+                    arguments, positional_args, kwnames_o, tail ? frame->previous : frame
                 );
                 DEAD(args);
                 DEAD(self_or_null);
@@ -5413,6 +5442,9 @@ dummy_func(
                 // so there is no need to clean them up.
                 if (new_frame == NULL) {
                     ERROR_NO_POP();
+                }
+                if (tail) {
+                    DISPATCH_TAIL_CALL(new_frame);
                 }
                 assert(INSTRUCTION_SIZE == 1 + INLINE_CACHE_ENTRIES_CALL_KW);
                 frame->return_offset = INSTRUCTION_SIZE;
@@ -5650,15 +5682,27 @@ dummy_func(
                     Py_ssize_t nargs = PyTuple_GET_SIZE(callargs);
                     int code_flags = ((PyCodeObject *)PyFunction_GET_CODE(func))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(func));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL_EX &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, func))
+                    {
+                        // The new frame replaces this one, so it can't
+                        // borrow references from this frame's locals.
+                        tail = true;
+                        func_st = PyStackRef_MakeHeapSafe(func_st);
+                    }
 
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit_Ex(
                         tstate, func_st, locals,
-                        nargs, callargs, kwargs, frame);
+                        nargs, callargs, kwargs, tail ? frame->previous : frame);
                     // Need to sync the stack since we exit with DISPATCH_INLINED.
                     INPUTS_DEAD();
                     SYNC_SP();
                     if (new_frame == NULL) {
                         ERROR_NO_POP();
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     assert(INSTRUCTION_SIZE == 1 + INLINE_CACHE_ENTRIES_CALL_FUNCTION_EX);
                     frame->return_offset = INSTRUCTION_SIZE;
@@ -5770,7 +5814,8 @@ dummy_func(
             _CHECK_PERIODIC_AT_END;
 
         // Tail-position variants of CALL, CALL_KW and CALL_FUNCTION_EX.
-        // The compiler always follows them with RETURN_VALUE.
+        // The compiler always follows them with RETURN_VALUE, which runs
+        // when the current frame is not replaced by the callee's frame.
         macro(TAIL_CALL) =
             unused/3 +
             _MAYBE_EXPAND_METHOD +

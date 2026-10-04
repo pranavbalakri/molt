@@ -1882,19 +1882,33 @@
                 {
                     int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                    {
+                        tail = true;
+                        callable = PyStackRef_MakeHeapSafe(callable);
+                        self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                        for (int i = 0; i < oparg; i++) {
+                            args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                        }
+                    }
                     stack_pointer[-2 - oparg] = callable;
                     stack_pointer[-1 - oparg] = self_or_null;
                     _PyFrame_SetStackPointer(frame, stack_pointer);
                     _PyFrame_StackPointerValidate(frame);
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                         tstate, callable, locals,
-                        arguments, total_args, NULL, frame
+                        arguments, total_args, NULL, tail ? frame->previous : frame
                     );
                     _PyFrame_StackPointerInvalidate(frame);
                     stack_pointer += -2 - oparg;
                     ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                     if (new_frame == NULL) {
                         JUMP_TO_LABEL(error);
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     frame->return_offset = 4u ;
                     DISPATCH_INLINED(new_frame);
@@ -3138,18 +3152,29 @@
                         Py_ssize_t nargs = PyTuple_GET_SIZE(callargs);
                         int code_flags = ((PyCodeObject *)PyFunction_GET_CODE(func))->co_flags;
                         PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(func));
+                        bool tail = false;
+                        if (opcode == TAIL_CALL_EX &&
+                            _PyEval_CanEliminateTailCall(tstate, frame, func))
+                        {
+                            tail = true;
+                            func_st = PyStackRef_MakeHeapSafe(func_st);
+                        }
+                        stack_pointer[-4] = func_st;
                         stack_pointer += -2;
                         ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                         _PyFrame_SetStackPointer(frame, stack_pointer);
                         _PyFrame_StackPointerValidate(frame);
                         _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit_Ex(
                             tstate, func_st, locals,
-                            nargs, callargs, kwargs, frame);
+                            nargs, callargs, kwargs, tail ? frame->previous : frame);
                         _PyFrame_StackPointerInvalidate(frame);
                         stack_pointer += -2;
                         ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                         if (new_frame == NULL) {
                             JUMP_TO_LABEL(error);
+                        }
+                        if (tail) {
+                            DISPATCH_TAIL_CALL(new_frame);
                         }
                         assert( 2u == 1 + INLINE_CACHE_ENTRIES_CALL_FUNCTION_EX);
                         frame->return_offset = 2u ;
@@ -3449,13 +3474,24 @@
                 {
                     int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL_KW &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                    {
+                        tail = true;
+                        callable = PyStackRef_MakeHeapSafe(callable);
+                        self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                        for (int i = 0; i < oparg; i++) {
+                            args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                        }
+                    }
                     stack_pointer[-3 - oparg] = callable;
                     stack_pointer[-2 - oparg] = self_or_null;
                     _PyFrame_SetStackPointer(frame, stack_pointer);
                     _PyFrame_StackPointerValidate(frame);
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                         tstate, callable, locals,
-                        arguments, positional_args, kwnames_o, frame
+                        arguments, positional_args, kwnames_o, tail ? frame->previous : frame
                     );
                     _PyFrame_StackPointerInvalidate(frame);
                     stack_pointer += -3 - oparg;
@@ -3466,6 +3502,9 @@
                     _PyFrame_StackPointerInvalidate(frame);
                     if (new_frame == NULL) {
                         JUMP_TO_LABEL(error);
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     assert( 4u == 1 + INLINE_CACHE_ENTRIES_CALL_KW);
                     frame->return_offset = 4u ;
@@ -7161,17 +7200,33 @@
                 {
                     int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                    {
+                        tail = true;
+                        callable = PyStackRef_MakeHeapSafe(callable);
+                        self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                        for (int i = 0; i < oparg; i++) {
+                            args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                        }
+                    }
+                    stack_pointer[-2 - oparg] = callable;
+                    stack_pointer[-1 - oparg] = self_or_null;
                     assert(stack_pointer == _PyFrame_GetStackPointer(frame));
                     _PyFrame_StackPointerValidate(frame);
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                         tstate, callable, locals,
-                        arguments, total_args, NULL, frame
+                        arguments, total_args, NULL, tail ? frame->previous : frame
                     );
                     _PyFrame_StackPointerInvalidate(frame);
                     stack_pointer += -2 - oparg;
                     ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                     if (new_frame == NULL) {
                         JUMP_TO_LABEL(error);
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     frame->return_offset = 4u ;
                     DISPATCH_INLINED(new_frame);
@@ -7328,18 +7383,29 @@
                         Py_ssize_t nargs = PyTuple_GET_SIZE(callargs);
                         int code_flags = ((PyCodeObject *)PyFunction_GET_CODE(func))->co_flags;
                         PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(func));
+                        bool tail = false;
+                        if (opcode == TAIL_CALL_EX &&
+                            _PyEval_CanEliminateTailCall(tstate, frame, func))
+                        {
+                            tail = true;
+                            func_st = PyStackRef_MakeHeapSafe(func_st);
+                        }
+                        stack_pointer[-4] = func_st;
                         stack_pointer += -2;
                         ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                         _PyFrame_SetStackPointer(frame, stack_pointer);
                         _PyFrame_StackPointerValidate(frame);
                         _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit_Ex(
                             tstate, func_st, locals,
-                            nargs, callargs, kwargs, frame);
+                            nargs, callargs, kwargs, tail ? frame->previous : frame);
                         _PyFrame_StackPointerInvalidate(frame);
                         stack_pointer += -2;
                         ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                         if (new_frame == NULL) {
                             JUMP_TO_LABEL(error);
+                        }
+                        if (tail) {
+                            DISPATCH_TAIL_CALL(new_frame);
                         }
                         assert( 2u == 1 + INLINE_CACHE_ENTRIES_CALL_FUNCTION_EX);
                         frame->return_offset = 2u ;
@@ -7477,11 +7543,24 @@
                 {
                     int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL_KW &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                    {
+                        tail = true;
+                        callable = PyStackRef_MakeHeapSafe(callable);
+                        self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                        for (int i = 0; i < oparg; i++) {
+                            args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                        }
+                    }
+                    stack_pointer[-3 - oparg] = callable;
+                    stack_pointer[-2 - oparg] = self_or_null;
                     assert(stack_pointer == _PyFrame_GetStackPointer(frame));
                     _PyFrame_StackPointerValidate(frame);
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                         tstate, callable, locals,
-                        arguments, positional_args, kwnames_o, frame
+                        arguments, positional_args, kwnames_o, tail ? frame->previous : frame
                     );
                     _PyFrame_StackPointerInvalidate(frame);
                     stack_pointer += -3 - oparg;
@@ -7492,6 +7571,9 @@
                     _PyFrame_StackPointerInvalidate(frame);
                     if (new_frame == NULL) {
                         JUMP_TO_LABEL(error);
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     assert( 4u == 1 + INLINE_CACHE_ENTRIES_CALL_KW);
                     frame->return_offset = 4u ;
@@ -8339,17 +8421,33 @@
                 {
                     int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                    {
+                        tail = true;
+                        callable = PyStackRef_MakeHeapSafe(callable);
+                        self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                        for (int i = 0; i < oparg; i++) {
+                            args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                        }
+                    }
+                    stack_pointer[-2 - oparg] = callable;
+                    stack_pointer[-1 - oparg] = self_or_null;
                     assert(stack_pointer == _PyFrame_GetStackPointer(frame));
                     _PyFrame_StackPointerValidate(frame);
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                         tstate, callable, locals,
-                        arguments, total_args, NULL, frame
+                        arguments, total_args, NULL, tail ? frame->previous : frame
                     );
                     _PyFrame_StackPointerInvalidate(frame);
                     stack_pointer += -2 - oparg;
                     ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                     if (new_frame == NULL) {
                         JUMP_TO_LABEL(error);
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     frame->return_offset = 4u ;
                     DISPATCH_INLINED(new_frame);
@@ -8506,18 +8604,29 @@
                         Py_ssize_t nargs = PyTuple_GET_SIZE(callargs);
                         int code_flags = ((PyCodeObject *)PyFunction_GET_CODE(func))->co_flags;
                         PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(func));
+                        bool tail = false;
+                        if (opcode == TAIL_CALL_EX &&
+                            _PyEval_CanEliminateTailCall(tstate, frame, func))
+                        {
+                            tail = true;
+                            func_st = PyStackRef_MakeHeapSafe(func_st);
+                        }
+                        stack_pointer[-4] = func_st;
                         stack_pointer += -2;
                         ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                         _PyFrame_SetStackPointer(frame, stack_pointer);
                         _PyFrame_StackPointerValidate(frame);
                         _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit_Ex(
                             tstate, func_st, locals,
-                            nargs, callargs, kwargs, frame);
+                            nargs, callargs, kwargs, tail ? frame->previous : frame);
                         _PyFrame_StackPointerInvalidate(frame);
                         stack_pointer += -2;
                         ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                         if (new_frame == NULL) {
                             JUMP_TO_LABEL(error);
+                        }
+                        if (tail) {
+                            DISPATCH_TAIL_CALL(new_frame);
                         }
                         assert( 2u == 1 + INLINE_CACHE_ENTRIES_CALL_FUNCTION_EX);
                         frame->return_offset = 2u ;
@@ -8654,11 +8763,24 @@
                 {
                     int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL_KW &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                    {
+                        tail = true;
+                        callable = PyStackRef_MakeHeapSafe(callable);
+                        self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                        for (int i = 0; i < oparg; i++) {
+                            args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                        }
+                    }
+                    stack_pointer[-3 - oparg] = callable;
+                    stack_pointer[-2 - oparg] = self_or_null;
                     assert(stack_pointer == _PyFrame_GetStackPointer(frame));
                     _PyFrame_StackPointerValidate(frame);
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                         tstate, callable, locals,
-                        arguments, positional_args, kwnames_o, frame
+                        arguments, positional_args, kwnames_o, tail ? frame->previous : frame
                     );
                     _PyFrame_StackPointerInvalidate(frame);
                     stack_pointer += -3 - oparg;
@@ -8669,6 +8791,9 @@
                     _PyFrame_StackPointerInvalidate(frame);
                     if (new_frame == NULL) {
                         JUMP_TO_LABEL(error);
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     assert( 4u == 1 + INLINE_CACHE_ENTRIES_CALL_KW);
                     frame->return_offset = 4u ;
@@ -13284,19 +13409,33 @@
                 {
                     int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                    {
+                        tail = true;
+                        callable = PyStackRef_MakeHeapSafe(callable);
+                        self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                        for (int i = 0; i < oparg; i++) {
+                            args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                        }
+                    }
                     stack_pointer[-2 - oparg] = callable;
                     stack_pointer[-1 - oparg] = self_or_null;
                     _PyFrame_SetStackPointer(frame, stack_pointer);
                     _PyFrame_StackPointerValidate(frame);
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                         tstate, callable, locals,
-                        arguments, total_args, NULL, frame
+                        arguments, total_args, NULL, tail ? frame->previous : frame
                     );
                     _PyFrame_StackPointerInvalidate(frame);
                     stack_pointer += -2 - oparg;
                     ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                     if (new_frame == NULL) {
                         JUMP_TO_LABEL(error);
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     frame->return_offset = 4u ;
                     DISPATCH_INLINED(new_frame);
@@ -13455,18 +13594,29 @@
                         Py_ssize_t nargs = PyTuple_GET_SIZE(callargs);
                         int code_flags = ((PyCodeObject *)PyFunction_GET_CODE(func))->co_flags;
                         PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(func));
+                        bool tail = false;
+                        if (opcode == TAIL_CALL_EX &&
+                            _PyEval_CanEliminateTailCall(tstate, frame, func))
+                        {
+                            tail = true;
+                            func_st = PyStackRef_MakeHeapSafe(func_st);
+                        }
+                        stack_pointer[-4] = func_st;
                         stack_pointer += -2;
                         ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                         _PyFrame_SetStackPointer(frame, stack_pointer);
                         _PyFrame_StackPointerValidate(frame);
                         _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit_Ex(
                             tstate, func_st, locals,
-                            nargs, callargs, kwargs, frame);
+                            nargs, callargs, kwargs, tail ? frame->previous : frame);
                         _PyFrame_StackPointerInvalidate(frame);
                         stack_pointer += -2;
                         ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
                         if (new_frame == NULL) {
                             JUMP_TO_LABEL(error);
+                        }
+                        if (tail) {
+                            DISPATCH_TAIL_CALL(new_frame);
                         }
                         assert( 2u == 1 + INLINE_CACHE_ENTRIES_CALL_FUNCTION_EX);
                         frame->return_offset = 2u ;
@@ -13576,13 +13726,24 @@
                 {
                     int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable_o))->co_flags;
                     PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable_o));
+                    bool tail = false;
+                    if (opcode == TAIL_CALL_KW &&
+                        _PyEval_CanEliminateTailCall(tstate, frame, callable_o))
+                    {
+                        tail = true;
+                        callable = PyStackRef_MakeHeapSafe(callable);
+                        self_or_null = PyStackRef_MakeHeapSafe(self_or_null);
+                        for (int i = 0; i < oparg; i++) {
+                            args[i] = PyStackRef_MakeHeapSafe(args[i]);
+                        }
+                    }
                     stack_pointer[-3 - oparg] = callable;
                     stack_pointer[-2 - oparg] = self_or_null;
                     _PyFrame_SetStackPointer(frame, stack_pointer);
                     _PyFrame_StackPointerValidate(frame);
                     _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
                         tstate, callable, locals,
-                        arguments, positional_args, kwnames_o, frame
+                        arguments, positional_args, kwnames_o, tail ? frame->previous : frame
                     );
                     _PyFrame_StackPointerInvalidate(frame);
                     stack_pointer += -3 - oparg;
@@ -13593,6 +13754,9 @@
                     _PyFrame_StackPointerInvalidate(frame);
                     if (new_frame == NULL) {
                         JUMP_TO_LABEL(error);
+                    }
+                    if (tail) {
+                        DISPATCH_TAIL_CALL(new_frame);
                     }
                     assert( 4u == 1 + INLINE_CACHE_ENTRIES_CALL_KW);
                     frame->return_offset = 4u ;

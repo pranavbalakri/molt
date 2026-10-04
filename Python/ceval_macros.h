@@ -230,6 +230,19 @@ do { \
         JUMP_TO_LABEL(start_frame);                              \
     } while (0)
 
+/* Replace the current frame with NEW_FRAME, which a tail call pushed on top
+   of it, and start executing it. */
+#define DISPATCH_TAIL_CALL(NEW_FRAME)                            \
+    do {                                                         \
+        _PyFrame_SetStackPointer(frame, stack_pointer);          \
+        _PyFrame_StackPointerValidate(frame);                    \
+        DTRACE_FUNCTION_RETURN();                                \
+        _Py_LeaveRecursiveCallPy(tstate);                        \
+        frame = _PyEval_FrameClearAndReplace(tstate, frame, (NEW_FRAME)); \
+        CALL_STAT_INC(inlined_py_calls);                         \
+        JUMP_TO_LABEL(start_frame);                              \
+    } while (0)
+
 /* Tuple access macros */
 
 #ifndef Py_DEBUG
