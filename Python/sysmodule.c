@@ -2081,7 +2081,6 @@ sys__getframe_impl(PyObject *module, int depth)
 
     if (frame != NULL) {
         while (depth > 0) {
-            depth = (int)_PyFrame_SkipTailCalls(frame, depth);
             frame = _PyFrame_GetFirstComplete(frame->previous);
             if (frame == NULL) {
                 break;

@@ -1022,14 +1022,12 @@ setup_context(Py_ssize_t stack_level,
     // warnings-related stack level to avoid.
     if (stack_level <= 0 || is_internal_frame(f)) {
         while (--stack_level > 0 && f != NULL) {
-            stack_level = _PyFrame_SkipTailCalls(f->f_frame, stack_level);
             PyFrameObject *back = PyFrame_GetBack(f);
             Py_SETREF(f, back);
         }
     }
     else {
         while (--stack_level > 0 && f != NULL) {
-            stack_level = _PyFrame_SkipTailCalls(f->f_frame, stack_level);
             f = next_external_frame(f, skip_file_prefixes);
         }
     }

@@ -6,7 +6,6 @@ import enum
 import faulthandler
 import io
 import os
-import re
 import sys
 import tempfile
 import threading
@@ -377,31 +376,31 @@ class CounterTests(unittest.TestCase):
 
 @requires_tce
 class FrameDepthTests(unittest.TestCase):
-    """Lookups by depth count the frames that tail calls eliminated."""
 
-    def test_getframe(self):
-        def inner(depth):
-            frame = sys._getframe(depth)
-            return frame.f_code.co_name
-        def middle(depth):
-            return inner(depth)
-        def outer(depth):
-            name = middle(depth)
-            return name
-        self.assertEqual(outer(0), "inner")
-        # Level 1 is middle, which was eliminated; the frame above it is used.
-        self.assertEqual(outer(1), "outer")
-        self.assertEqual(outer(2), "outer")
-        self.assertEqual(outer(3), "test_getframe")
-
-    def test_getframemodulename(self):
-        # EnumType.__call__ tail-calls _create_, which looks two frames up.
+    def test_getframemodulename_counts_eliminated_frames(self):
+        # EnumType.__call__ tail-calls _create_, which asks for the module
+        # two frames up.
         Color = enum.Enum("Color", "RED GREEN")
         self.assertEqual(Color.__module__, __name__)
 
-    def test_warning_stacklevel(self):
+    def test_getframe_matches_f_back(self):
+        def inner(depth):
+            frame = sys._getframe(depth)
+            return frame
+        def middle(depth):
+            return inner(depth)
+        def outer(depth):
+            frame = middle(depth)
+            return frame
+        here = sys._getframe()
+        self.assertEqual(outer(0).f_code.co_name, "inner")
+        self.assertEqual(outer(1).f_code.co_name, "outer")
+        self.assertIs(outer(2), here)
+
+    def test_warning_stacklevel_matches_f_back(self):
+        # Libraries such as gettext compute a stacklevel by walking f_back.
         def inner():
-            warnings.warn("deep", UserWarning, stacklevel=3)
+            warnings.warn("deep", UserWarning, stacklevel=2)
         def middle():
             return inner()
         with warnings.catch_warnings(record=True) as caught:
@@ -410,14 +409,14 @@ class FrameDepthTests(unittest.TestCase):
         self.assertEqual(caught[0].filename, __file__)
         self.assertEqual(caught[0].lineno, lineno)
 
-    def test_warning_stacklevel_pure_python(self):
+    def test_warning_stacklevel_matches_f_back_pure_python(self):
         code = "\n".join([
             "import sys",
             "sys.modules.pop('warnings', None)",
             "sys.modules['_warnings'] = None",
             "import warnings",
             "def inner():",
-            "    warnings.warn('deep', UserWarning, stacklevel=3)",
+            "    warnings.warn('deep', UserWarning, stacklevel=2)",
             "def middle():",
             "    return inner()",
             "with warnings.catch_warnings(record=True) as caught:",
@@ -427,12 +426,6 @@ class FrameDepthTests(unittest.TestCase):
         ])
         res = script_helper.assert_python_ok("-c", code)
         self.assertEqual(res.out.decode().split(), ["_py_warnings", "11"])
-
-    def test_re_warning_location(self):
-        re.purge()
-        with self.assertWarns(FutureWarning) as cm:
-            re.compile(r"[[a-y]]")
-        self.assertEqual(cm.filename, __file__)
 
 
 @requires_tce

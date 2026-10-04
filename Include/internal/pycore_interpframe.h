@@ -318,9 +318,9 @@ _PyThreadState_GetFrame(PyThreadState *tstate)
 }
 
 /* Remove from 'depth' the frames that tail calls eliminated between 'frame'
-   and its caller, stopping at zero.  Lookups that walk a number of frames
-   up the stack use this so that they still reach the frame they would have
-   reached without tail call elimination. */
+   and its caller, stopping at zero.  sys._getframemodulename() uses this so
+   that callers passing a fixed depth through their own tail calls still
+   reach the frame they would have reached without tail call elimination. */
 static inline Py_ssize_t
 _PyFrame_SkipTailCalls(_PyInterpreterFrame *frame, Py_ssize_t depth)
 {

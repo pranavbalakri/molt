@@ -491,10 +491,7 @@ def warn(message, category=None, stacklevel=1, source=None,
         else:
             frame = sys._getframe(1)
             # Look for one frame less since the above line starts us off.
-            # Frames that tail calls eliminated still count as levels.
-            level = stacklevel - 1
-            while level > 0:
-                level -= 1 + frame.f_tail_calls
+            for x in range(stacklevel-1):
                 frame = _next_external_frame(frame, skip_file_prefixes)
                 if frame is None:
                     raise ValueError
