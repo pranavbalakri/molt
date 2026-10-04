@@ -2087,6 +2087,37 @@ codegen_ifexp(compiler *c, expr_ty e)
     return SUCCESS;
 }
 
+/* Return true if 'value', the result of the enclosing function, should be
+   compiled as a tail call. */
+static bool
+codegen_is_tail_call(compiler *c, expr_ty value)
+{
+    PySTEntryObject *ste = SYMTABLE_ENTRY(c);
+    return (value->kind == Call_kind &&
+            !ste->ste_generator && !ste->ste_coroutine &&
+            !_PyCompile_ReturnNeedsCleanup(c));
+}
+
+/* Replace the call that was just emitted with its tail-call form.
+   The call must be the last instruction in the sequence. */
+static void
+codegen_make_tail_call(compiler *c)
+{
+    instr_sequence *seq = INSTR_SEQUENCE(c);
+    instruction *instr = &seq->s_instrs[seq->s_used - 1];
+    switch (instr->i_opcode) {
+        case CALL:
+            instr->i_opcode = TAIL_CALL;
+            break;
+        case CALL_KW:
+            instr->i_opcode = TAIL_CALL_KW;
+            break;
+        case CALL_FUNCTION_EX:
+            instr->i_opcode = TAIL_CALL_EX;
+            break;
+    }
+}
+
 static int
 codegen_lambda(compiler *c, expr_ty e)
 {
@@ -2116,6 +2147,9 @@ codegen_lambda(compiler *c, expr_ty e)
         co = _PyCompile_OptimizeAndAssemble(c, 0);
     }
     else {
+        if (codegen_is_tail_call(c, e->v.Lambda.body)) {
+            codegen_make_tail_call(c);
+        }
         location loc = LOC(e->v.Lambda.body);
         ADDOP_IN_SCOPE(c, loc, RETURN_VALUE);
         co = _PyCompile_OptimizeAndAssemble(c, 1);
@@ -2297,6 +2331,9 @@ codegen_return(compiler *c, stmt_ty s)
 
     if (preserve_tos) {
         VISIT(c, expr, s->v.Return.value);
+        if (codegen_is_tail_call(c, s->v.Return.value)) {
+            codegen_make_tail_call(c);
+        }
     } else {
         /* Emit instruction with line number for return value */
         if (s->v.Return.value != NULL) {

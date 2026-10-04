@@ -908,6 +908,23 @@ _PyCompile_InExceptionHandler(compiler *c)
     return false;
 }
 
+/* Return true if a return statement here has to run code other than popping
+   loop iterators, e.g. a finally block, __exit__ or except-handler cleanup. */
+bool
+_PyCompile_ReturnNeedsCleanup(compiler *c)
+{
+    for (Py_ssize_t i = 0; i < c->u->u_nfblocks; i++) {
+        switch (c->u->u_fblock[i].fb_type) {
+            case COMPILE_FBLOCK_WHILE_LOOP:
+            case COMPILE_FBLOCK_FOR_LOOP:
+                break;
+            default:
+                return true;
+        }
+    }
+    return false;
+}
+
 void
 _PyCompile_DeferredAnnotations(compiler *c,
                                PyObject **deferred_annotations,
