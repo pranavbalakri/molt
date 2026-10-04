@@ -2034,7 +2034,8 @@ _PyEval_CanEliminateTailCall(PyThreadState *tstate, _PyInterpreterFrame *frame,
        so it would miss the deferred references held by that frame. */
     return 0;
 #else
-    if (IS_PEP523_HOOKED(tstate) ||
+    if (tstate->interp->notce ||
+        IS_PEP523_HOOKED(tstate) ||
         frame->owner != FRAME_OWNED_BY_THREAD ||
         Py_TYPE(callable) != &PyFunction_Type ||
         ((PyFunctionObject *)callable)->vectorcall != _PyFunction_Vectorcall)

@@ -926,6 +926,8 @@ struct _is {
     // Initialized to _PyEval_EvalFrameDefault().
     _PyFrameEvalFunction eval_frame;
     int eval_frame_allow_specialization;
+    // Set by -X notce and PYTHONNOTCE to turn off tail call elimination.
+    int notce;
 
     PyFunction_WatchCallback func_watchers[FUNC_MAX_WATCHERS];
     // One bit is set for each non-NULL entry in func_watchers

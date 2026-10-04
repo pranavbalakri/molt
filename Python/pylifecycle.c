@@ -452,6 +452,15 @@ interpreter_update_config(PyThreadState *tstate, int only_update_path_config)
 
 */
 
+static void
+init_interp_tail_calls(PyInterpreterState *interp)
+{
+    const PyConfig *config = _PyInterpreterState_GetConfig(interp);
+    interp->notce =
+        (_Py_get_xoption(&config->xoptions, L"notce") != NULL ||
+         _Py_GetEnv(config->use_environment, "PYTHONNOTCE") != NULL);
+}
+
 static PyStatus
 pyinit_core_reconfigure(_PyRuntimeState *runtime,
                         PyThreadState **tstate_p,
@@ -480,6 +489,7 @@ pyinit_core_reconfigure(_PyRuntimeState *runtime,
         return status;
     }
     config = _PyInterpreterState_GetConfig(interp);
+    init_interp_tail_calls(interp);
 
     if (config->_install_importlib) {
         status = _PyPathConfig_UpdateGlobal(config);
@@ -967,6 +977,8 @@ pycore_interp_init(PyThreadState *tstate)
     PyInterpreterState *interp = tstate->interp;
     PyStatus status;
     PyObject *sysmod = NULL;
+
+    init_interp_tail_calls(interp);
 
     // Create singletons before the first PyType_Ready() call, since
     // PyType_Ready() uses singletons like the Unicode empty string (tp_doc)
